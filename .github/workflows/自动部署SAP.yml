@@ -26,7 +26,7 @@ on:
         default: false
 
 env:
-  DOCKOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/nodejs:main' }}
+  DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/nodejs:main' }}
   MEMORY: 512M
 
 jobs:
@@ -139,7 +139,6 @@ jobs:
         fi
         cf set-env ${{ env.APP_NAME }} CFIP "$CFIP_VALUE"
         
-        # 新的判断方式：根据运行时用户输入的是/否来决定是否配置DOMAIN
         if [ "${{ github.event.inputs.is_direct_connect }}" = "true" ]; then
           echo "已选择“直连镜像”模式，开始自动配置 DOMAIN 环境变量..."
           ROUTE=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
