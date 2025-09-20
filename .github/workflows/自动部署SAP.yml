@@ -19,9 +19,14 @@ on:
         options:
           - SG
           - US
+      is_direct_connect:
+        description: '启用直连？理论上速度更快'
+        required: true
+        type: boolean
+        default: false
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/nodejs:main' }}
+  DOCKOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/nodejs:main' }}
   MEMORY: 512M
 
 jobs:
@@ -134,8 +139,9 @@ jobs:
         fi
         cf set-env ${{ env.APP_NAME }} CFIP "$CFIP_VALUE"
         
-        if [[ "${{ env.DOCKER_IMAGE }}" =~ (xhttp|goxhttp|ws) ]]; then
-          echo "检测到直连类镜像，开始自动配置 DOMAIN 环境变量..."
+        # 新的判断方式：根据运行时用户输入的是/否来决定是否配置DOMAIN
+        if [ "${{ github.event.inputs.is_direct_connect }}" = "true" ]; then
+          echo "已选择“直连镜像”模式，开始自动配置 DOMAIN 环境变量..."
           ROUTE=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
           if [ -n "$ROUTE" ]; then
             echo "已设置 DOMAIN 环境变量为: $ROUTE"
@@ -170,6 +176,6 @@ jobs:
         if [ -n "$APP_URL" ]; then
           echo "应用 URL (APP_URL): https://$APP_URL"
         else
-          echo "未知错误。"
+          echo "看到这里就证明出问题了。"
         fi
         echo "----------------------------------------"
