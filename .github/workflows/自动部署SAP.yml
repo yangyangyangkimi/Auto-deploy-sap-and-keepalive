@@ -26,7 +26,6 @@ on:
         default: false
 
 env:
-  DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE || 'ghcr.io/eooce/nodejs:main' }}
   MEMORY: 512M
 
 jobs:
@@ -44,6 +43,16 @@ jobs:
         echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
         sudo apt-get update
         sudo apt-get install -y cf8-cli
+
+    - name: 根据输入选择Docker镜像
+      run: |
+        if [ "${{ github.event.inputs.is_direct_connect }}" = "true" ]; then
+          echo "已选择“直连镜像”，使用 ghcr.io/eooce/ws:latest"
+          echo "DOCKER_IMAGE=ghcr.io/eooce/ws:latest" >> $GITHUB_ENV
+        else
+          echo "未选择“直连镜像”，使用默认的 ghcr.io/eooce/nodejs:main"
+          echo "DOCKER_IMAGE=ghcr.io/eooce/nodejs:main" >> $GITHUB_ENV
+        fi
 
     - name: 生成应用名称并设置API端点
       run: |
@@ -99,6 +108,7 @@ jobs:
     - name: 部署应用
       run: |
         echo "开始部署应用: ${{ env.APP_NAME }}"
+        echo "使用镜像: ${{ env.DOCKER_IMAGE }}"
         echo "目标区域: ${{ github.event.inputs.region }}"
         echo "目标组织: ${{ env.SELECTED_ORG }}"
         echo "目标空间: ${{ env.SELECTED_SPACE }}"
@@ -112,7 +122,6 @@ jobs:
         cf set-env ${{ env.APP_NAME }} NAME "SAP"
         cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
         cf set-env ${{ env.APP_NAME }} NEZHA_SERVER "${{ secrets.NEZHA_SERVER }}"
-        cf set-env ${{ env.APP_NAME }} NEZHA_PORT "${{ secrets.NEZHA_PORT }}"
         cf set-env ${{ env.APP_NAME }} NEZHA_KEY "${{ secrets.NEZHA_KEY }}"
         cf set-env ${{ env.APP_NAME }} SUB_PATH "${{ secrets.SUB_PATH }}"
         cf set-env ${{ env.APP_NAME }} CFPORT "${{ secrets.CFPORT }}"
