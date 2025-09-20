@@ -67,20 +67,65 @@ jobs:
         echo "使用API端点: $CF_API"
         echo "应用名称: $APP_NAME"
 
-    - name: Login to Cloud Foundry
+    - name: Login to Cloud Foundry and auto-detect org/space
       run: |
-        if [ "${{ github.event.inputs.region }}" = "SG" ]; then
-          cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}" -o "${{ secrets.SG_ORG }}" -s "${{ secrets.SPACE }}"
-        elif [ "${{ github.event.inputs.region }}" = "US" ]; then
-          cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}" -o "${{ secrets.US_ORG }}" -s "${{ secrets.SPACE }}"
+        # 首先进行基础登录
+        cf login -a ${{ env.CF_API }} -u "${{ secrets.EMAIL }}" -p "${{ secrets.PASSWORD }}"
+        
+        echo "自动检测可用的组织和空间..."
+        
+        # 获取所有可用的组织
+        cf orgs > orgs.txt
+        echo "可用组织:"
+        cat orgs.txt
+        
+        # 自动选择第一个可用的组织（跳过标题行）
+        SELECTED_ORG=$(cf orgs | grep -v "^name$" | grep -v "^Getting orgs" | grep -v "^$" | head -n 1 | awk '{print $1}')
+        
+        if [ -z "$SELECTED_ORG" ]; then
+          echo "错误: 未找到可用的组织"
+          exit 1
         fi
+        
+        echo "选择组织: $SELECTED_ORG"
+        cf target -o "$SELECTED_ORG"
+        
+        # 获取该组织下的所有空间
+        cf spaces > spaces.txt
+        echo "可用空间:"
+        cat spaces.txt
+        
+        # 自动选择第一个可用的空间
+        SELECTED_SPACE=$(cf spaces | grep -v "^name$" | grep -v "^Getting spaces" | grep -v "^$" | head -n 1 | awk '{print $1}')
+        
+        if [ -z "$SELECTED_SPACE" ]; then
+          echo "错误: 未找到可用的空间"
+          exit 1
+        fi
+        
+        echo "选择空间: $SELECTED_SPACE"
+        cf target -s "$SELECTED_SPACE"
+        
+        # 显示当前目标信息
+        echo "当前部署目标:"
+        cf target
+        
+        # 将选择的组织和空间保存到环境变量中（用于后续步骤参考）
+        echo "SELECTED_ORG=$SELECTED_ORG" >> $GITHUB_ENV
+        echo "SELECTED_SPACE=$SELECTED_SPACE" >> $GITHUB_ENV
 
     - name: Deploy application
       run: |
+        echo "开始部署应用: ${{ env.APP_NAME }}"
+        echo "目标组织: ${{ env.SELECTED_ORG }}"
+        echo "目标空间: ${{ env.SELECTED_SPACE }}"
+        
         cf push ${{ env.APP_NAME }} --docker-image ${{ env.DOCKER_IMAGE }} -m ${{ env.MEMORY }} --health-check-type port
 
     - name: Set environment variables
       run: |
+        echo "设置环境变量..."
+        
         # 基础环境变量
         cf set-env ${{ env.APP_NAME }} NAME "SAP"
         cf set-env ${{ env.APP_NAME }} UUID "${{ secrets.UUID }}"
@@ -97,19 +142,32 @@ jobs:
         
         # 可选：从文件读取环境变量(如果存在)
         if [ -f .env ]; then
+          echo "从 .env 文件读取额外环境变量..."
           while IFS= read -r line; do
             if [[ ! "$line" =~ ^# ]] && [[ -n "$line" ]]; then
               IFS='=' read -r key value <<< "$line"
               cf set-env ${{ env.APP_NAME }} "$key" "$value"
+              echo "  设置: $key"
             fi
           done < .env
         fi
 
     - name: Restage application
       run: |
+        echo "重新启动应用..."
         cf restage ${{ env.APP_NAME }}
 
     - name: Verify deployment
       run: |
+        echo "验证部署状态..."
         cf app ${{ env.APP_NAME }}
-        echo "Deployment completed successfully!"
+        
+        # 获取应用URL
+        APP_URL=$(cf app ${{ env.APP_NAME }} | grep "routes:" | awk '{print $2}')
+        
+        echo "部署完成!"
+        echo "应用名称: ${{ env.APP_NAME }}"
+        echo "访问地址: https://$APP_URL"
+        echo "部署组织: ${{ env.SELECTED_ORG }}"
+        echo "部署空间: ${{ env.SELECTED_SPACE }}"
+        echo "部署区域: ${{ github.event.inputs.region }}"
