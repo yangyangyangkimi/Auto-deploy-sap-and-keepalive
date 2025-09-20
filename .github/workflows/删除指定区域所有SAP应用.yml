@@ -103,10 +103,72 @@ jobs:
         echo "目标组织: ${{ env.SELECTED_ORG }}"
         echo "目标空间: ${{ env.SELECTED_SPACE }}"
         
-        # 获取所有应用名称（跳过前 3 行提示和表头）
-        apps=$(cf apps | awk 'NR>3 {print $1}' | grep -v '^$')
-        echo "发现的应用:"
+        # 获取所有应用名称，使用 || true 防止命令失败
+        apps=$(cf apps 2>/dev/null | awk 'NR>3 {print $1}' | grep -v '^
+
+    - name: 删除所有应用
+      if: steps.get-apps.outputs.has_apps == 'true'
+      run: |
+        # 从上一步获取应用列表
+        apps="${{ steps.get-apps.outputs.apps }}"
+        
+        echo "警告: 即将删除区域 ${{ github.event.inputs.region }} 中的所有应用"
+        echo "目标组织: ${{ env.SELECTED_ORG }}"
+        echo "目标空间: ${{ env.SELECTED_SPACE }}"
+        echo "应用列表:"
         echo "$apps"
+        echo "----------------------------------------"
+        
+        # 删除每个应用
+        success_count=0
+        failure_count=0
+        
+        for app in $apps; do
+          echo "正在删除应用: $app"
+          
+          if cf delete -f -r "$app"; then  # -f 强制删除，不需要确认；-r 同时删除关联的路由
+            echo "应用 $app 删除成功"
+            success_count=$((success_count + 1))
+          else
+            echo "应用 $app 删除失败"
+            failure_count=$((failure_count + 1))
+          fi
+          
+          echo "----------------------------------------"
+          sleep 5  # 每个应用之间等待 5 秒
+        done
+        
+        echo "删除操作完成"
+        echo "成功删除: $success_count 个应用"
+        echo "删除失败: $failure_count 个应用"
+
+    - name: 验证应用已删除
+      run: |
+        echo "验证删除结果..."
+        echo "区域 ${{ github.event.inputs.region }} 中剩余的应用:"
+        echo "组织: ${{ env.SELECTED_ORG }}"
+        echo "空间: ${{ env.SELECTED_SPACE }}"
+        echo "----------------------------------------"
+        
+        # 使用 || true 防止 cf apps 在没有应用时返回非零退出码
+        cf apps || true
+        
+        # 检查是否还有剩余应用，忽略命令的退出状态
+        remaining_apps=$(cf apps 2>/dev/null | awk 'NR>3 {print $1}' | grep -v '^ || true)
+        
+        if [ -z "$remaining_apps" ]; then
+          echo "确认: 区域 ${{ github.event.inputs.region }} 中所有应用已成功删除"
+        else
+          echo "警告: 区域 ${{ github.event.inputs.region }} 中仍有以下应用未删除:"
+          echo "$remaining_apps"
+        fi || true)
+        
+        echo "发现的应用:"
+        if [ -z "$apps" ]; then
+          echo "(无应用)"
+        else
+          echo "$apps"
+        fi
         
         # 检查是否有应用
         if [ -z "$apps" ]; then
@@ -168,10 +230,13 @@ jobs:
         echo "组织: ${{ env.SELECTED_ORG }}"
         echo "空间: ${{ env.SELECTED_SPACE }}"
         echo "----------------------------------------"
-        cf apps
         
-        # 检查是否还有剩余应用
-        remaining_apps=$(cf apps | awk 'NR>3 {print $1}' | grep -v '^$')
+        # 使用 || true 防止 cf apps 在没有应用时返回非零退出码
+        cf apps || true
+        
+        # 检查是否还有剩余应用，忽略命令的退出状态
+        remaining_apps=$(cf apps 2>/dev/null | awk 'NR>3 {print $1}' | grep -v '^ || true)
+        
         if [ -z "$remaining_apps" ]; then
           echo "确认: 区域 ${{ github.event.inputs.region }} 中所有应用已成功删除"
         else
