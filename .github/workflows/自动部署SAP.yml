@@ -87,7 +87,7 @@ jobs:
         echo "已自动选择组织: $SELECTED_ORG"
         cf target -o "$SELECTED_ORG"
         
-        SELECTED_SPACE=$(cf spaces | awk 'NR>3 {print $1; exit}')
+        SELECTED_SPACE="vamp"
         
         if [ -z "$SELECTED_SPACE" ]; then
           echo "错误：在组织 '$SELECTED_ORG' 中未找到任何可用的空间。"
